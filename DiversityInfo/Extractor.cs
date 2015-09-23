@@ -26,13 +26,16 @@ namespace DiversityInfo
     {
         static Regex question = new Regex("([0-9]+)\\.");
 
+        static string dept_code_validate = ".*";
         static string org_code_validate = "AGO|CPS|CPSI|SFO|TSOL|CO|CCS|CC|CMA|BIS|ACAS|CH|INS|LR|MO|NMO|OS|SFA|UKIPO|SA|DCLG|PI|QEII|DCMS|RP|DFE|EFA|NCTL|STA|DEFRA|APHA|CEFAS|FERA|RPA|VMD|OFWAT|DFID|DFT|DVLA|DSA|HA|MCA|ORR|VOSA|VCA|DWP|HSE|DECC|DH|FSA|MHPRA|PHE|ESTYN|FCO|FCOS|WP|HMRC|VO|HMT|DMO|GAD|NSI|HO|NCA|MOD|DSTL|DES|DSG|UKHO|MOJ|HMCTS|LAA|NA|NOMS|OPG|CICA|NIO|OFSTED|OFGEM|OFQAL|SO|SG|DS|SAA|SPPA|OAB|COPFS|SPS|OSCR|SCS|HS|NRS|RS|SHR|TS|ES|SIS|UKSA|UKEF";
+        static string pay_band_validate = ".*";
         static string status_code_validate = "CW|US|UI|S";
         static string prof_code_validate = "CM|EC|ENG|FIN|HR|IT|IA|LAW|KIM|MED|OPDEL|OR|PLA|POL|PCM|PPM|PSY|INS|SCI|SMR|STA|TAX|VET|PAM|OTH|NK";
         static string capacity_code_validate = "C|D|P|N";
         static string date_of_completion_validate = "[0-9]{6}";
+        static string exception_validate = ".*";
 
-        static List<string> headers = new List<string> { "Male", "Female", "PNTS", "Under 29", "30 to 39", "40 to 49", "50 to 59", "60 to 64", "65+", "PNTS", "Bangladeshi", "Chinese", "Indian", "Pakistani", "Any other Asian background", "African", "Caribbean", "Any other Black/African/Caribbean background", "White and Asian", "White and Black African", "White and Black Caribbean", "Any other mixed background", "Arab", "Any other ethnic group", "White", "PNTS", "Yes", "No", "PNTS", "Heterosexual/straight", "Gay /Lesbian", "Bisexual", "Other", "PNTS", "No religion", "Buddhist", "Christian", "Hindu", "Jewish", "Muslim", "Sikh", "Any other religion", "PNTS", "Full-time", "Part-time", "Job Share", "Other", "PNTS", "None", "Primary carer of a child/children (under 18)", "Primary carer of disabled child/children", "Primary carer of disabled adult (18 and over)", "Primary carer of older person (65 and over)", "Secondary carer", "PNTS", "Home Dept", "OGD", "Public service", "Voluntary", "Private Sector", "Other", "PNTS", "Yes", "No", "PNTS", "FLS", "HPDS", "SLS", "Other", "None", "PNTS", "CS Employee", "CS Jobs", "Guardian", "Exec/FT", "LinkedIn", "TimesOnline", "Twitter", "Word of Mouth", "Other", "PNTS", "Org Ref Code", "Vacancy Ref Number", "Status Ref Code", "Professional Ref Code", "Key Capacity Ref Code", "Date Of Campaign Completion"};
+        static List<string> headers = new List<string> { "Male", "Female", "PNTS", "Under 29", "30 to 39", "40 to 49", "50 to 59", "60 to 64", "65+", "PNTS", "Bangladeshi", "Chinese", "Indian", "Pakistani", "Any other Asian background", "African", "Caribbean", "Any other Black/African/Caribbean background", "White and Asian", "White and Black African", "White and Black Caribbean", "Any other mixed background", "Arab", "Any other ethnic group", "White", "PNTS", "Yes", "No", "PNTS", "Heterosexual/straight", "Gay /Lesbian", "Bisexual", "Other", "PNTS", "No religion", "Buddhist", "Christian", "Hindu", "Jewish", "Muslim", "Sikh", "Any other religion", "PNTS", "Full-time", "Part-time", "Job Share", "Other", "PNTS", "None", "Primary carer of a child/children (under 18)", "Primary carer of disabled child/children", "Primary carer of disabled adult (18 and over)", "Primary carer of older person (65 and over)", "Secondary carer", "PNTS", "Home Dept", "OGD", "Public service", "Voluntary", "Private Sector", "Other", "PNTS", "Yes", "No", "PNTS", "FLS", "HPDS", "SLS", "Other", "None", "PNTS", "CS Employee", "CS Jobs", "Guardian", "Exec/FT", "LinkedIn", "TimesOnline", "Twitter", "Word of Mouth", "Other", "PNTS", "Dept Ref Code", "Org Ref Code", "Vacancy Ref Number", "Pay Band", "Status Ref Code", "Professional Ref Code", "Key Capacity Ref Code", "Date Of Campaign Completion", "Exception 1", "Exception 2", "Exception 3"};
 
         internal static void Go(string folder, Func<string, int> stdout)
         {
@@ -40,35 +43,44 @@ namespace DiversityInfo
 
             var csv = new StringBuilder();
 
-            csv.AppendLine(string.Join(",", headers));
+            csv.AppendLine(string.Join(",", headers.ToArray()));
 
-            List<string> failed = new List<string>();
+            HashSet<string> failed = new HashSet<string>();
 
             foreach (var filename in Directory.GetFiles(folder, "*.docx"))
             {
-                stdout("Processing: " + filename);
+                stdout("\nProcessing: " + filename);
                 List<string> result;
                 try
                 {
-                     result = ExtractFile(filename);
+                     result = ExtractFile(filename, stdout, failed);
                 }
                 catch (Exception ex)
                 {
                     stdout("------------------------------------------");
                     stdout("Error processing file: " + filename);
                     stdout(ex.Message);
+                    stdout(ex.StackTrace);
                     stdout("------------------------------------------");
                     failed.Add(filename);
                     continue;
                 }
-                csv.AppendLine(string.Join(",", result));
+                csv.AppendLine(string.Join(",", result.ToArray()));
             }
 
             string outfile = Path.Combine(folder, "results.csv");
 
-            stdout("Writing to " + outfile);
 
-            File.WriteAllText(outfile, csv.ToString());
+            try
+            {
+                File.WriteAllText(outfile, csv.ToString());
+            }
+            catch (IOException)
+            {
+                stdout("Error writing to output file. Please check that this is not already opened by another program (e.g. Excel).");
+                return;
+            }
+            
 
             stdout("Finished\n");
             if (failed.Count() > 0)
@@ -82,7 +94,7 @@ namespace DiversityInfo
             }
         }
 
-        private static List<string> ExtractFile(string filename)
+        private static List<string> ExtractFile(string filename, Func<string, int> stdout, HashSet<string> failed)
         {
             List<Dictionary<string, string>> answers = new List<Dictionary<string, string>>();
 
@@ -231,45 +243,102 @@ namespace DiversityInfo
                 Table table2 = doc.MainDocumentPart.Document.Body.Elements<Table>().ElementAt(1);
                 var rows = table2.Elements<TableRow>();
 
-                var org_code = getTableValue(rows, 1, 1).Trim().ToUpper();
+                var dept_code = getTableValue(rows, 1, 1).Trim().ToUpper();
+                if (!Regex.IsMatch(dept_code, dept_code_validate))
+                {
+                    //throw new Exception("Dept Code is not valid: " + dept_code);
+                    stdout("Dept Code is not valid: " + dept_code);
+                    failed.Add(filename);
+                }
+                result.Add(dept_code);
+
+                var org_code = getTableValue(rows, 2, 1).Trim().ToUpper();
                 if (!Regex.IsMatch(org_code, org_code_validate))
                 {
-                    throw new Exception("Org Code is not valid: " + org_code);
+                    //throw new Exception("Org Code is not valid: " + org_code);
+                    stdout("Org Code is not valid: " + org_code);
+                    failed.Add(filename);
                 }
                 result.Add(org_code);
 
-                result.Add(getTableValue(rows, 2, 1));
+                // Vacancy Reference Number not validated
+                result.Add(getTableValue(rows, 3, 1));
 
-                var status_code = getTableValue(rows, 3, 1).Trim().ToUpper();
+                var pay_band = getTableValue(rows, 4, 1).Trim().ToUpper();
+                if (!Regex.IsMatch(pay_band, pay_band_validate))
+                {
+                    //throw new Exception("Pay Band is not valid: " + pay_band);
+                    stdout("Pay Band is not valid: " + pay_band);
+                    failed.Add(filename);
+                }
+                result.Add(pay_band);
+
+                var status_code = getTableValue(rows, 5, 1).Trim().ToUpper();
                 if (!Regex.IsMatch(status_code, status_code_validate))
                 {
-                    throw new Exception("Status Code is not valid: " + status_code);
+                    //throw new Exception("Status Code is not valid: " + status_code);
+                    stdout("Status Code is not valid: " + status_code);
+                    failed.Add(filename);
                 }
                 result.Add(status_code);
 
-                var prof_code = getTableValue(rows, 4, 1).Trim().ToUpper();
+                var prof_code = getTableValue(rows, 6, 1).Trim().ToUpper();
                 if (!Regex.IsMatch(prof_code, prof_code_validate))
                 {
-                    throw new Exception("Profession Code is not valid: " + prof_code);
+                    //throw new Exception("Profession Code is not valid: " + prof_code);
+                    stdout("Profession Code is not valid: " + prof_code);
+                    failed.Add(filename);
                 }
                 result.Add(prof_code);
 
-                var capacity_code = getTableValue(rows, 5, 1).Trim().ToUpper();
+                var capacity_code = getTableValue(rows, 7, 1).Trim().ToUpper();
                 if (!Regex.IsMatch(capacity_code, capacity_code_validate))
                 {
-                    throw new Exception("Key Capacity Code is not valid: " + capacity_code);
+                    //throw new Exception("Key Capacity Code is not valid: " + capacity_code);
+                    stdout("Key Capacity Code is not valid: " + capacity_code);
+                    failed.Add(filename);
                 }
                 result.Add(capacity_code);
 
-                var date_of_completion = getTableValue(rows, 6, 1);
+                /*
+                var date_of_completion = getTableValue(rows, 8, 1);
                 if (!Regex.IsMatch(date_of_completion, date_of_completion_validate))
                 {
-                    throw new Exception("Date Of Completion is not valid: " + date_of_completion);
+                    //throw new Exception("Date Of Completion is not valid: " + date_of_completion);
+                    stdout("Date Of Completion is not valid: " + date_of_completion);
+                    failed.Add(filename);
                 }
                 result.Add(date_of_completion);
+                */
+
+                var exception1 = getTableValue(rows, 8, 1);
+                if (!Regex.IsMatch(exception1, exception_validate))
+                {
+                    //throw new Exception("E1 is not valid: " + exception1);
+                    stdout("E1 is not valid: " + exception1);
+                    failed.Add(filename);
+                }
+                result.Add(exception1);
+
+                var exception2 = getTableValue(rows, 9, 1);
+                if (!Regex.IsMatch(exception2, exception_validate))
+                {
+                    //throw new Exception("E2 is not valid: " + exception2);
+                    stdout("E2 is not valid: " + exception1);
+                    failed.Add(filename);
+                }
+                result.Add(exception2);
+
+                var exception3 = getTableValue(rows, 10, 1);
+                if (!Regex.IsMatch(exception3, exception_validate))
+                {
+                    //throw new Exception("E3 is not valid: " + exception3);
+                    stdout("E3 is not valid: " + exception1);
+                    failed.Add(filename);
+                }
+                result.Add(exception3);
 
                 return result;
-
             }
         }
 
